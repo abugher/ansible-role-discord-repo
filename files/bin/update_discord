@@ -1,0 +1,25 @@
+#!/bin/bash
+
+generic_url='https://discord.com/api/download?platform=linux&format=deb'
+output_path='/home/apt-repo-server/discord'
+
+url="$(
+  curl -s "${generic_url}" \
+    | sed -E 's/.*(https:.*\.deb).*/\1/' \
+    | grep '^https:'
+)"
+filename="$(sed -E 's#.*/##g' <<< "${url}")"
+file="${output_path}/${filename}"
+
+printf "Current package:  %s\n" "${filename}"
+
+if ! test -e "${file}"; then
+  printf "Package not present.  Downloading.\n"
+  snapshot="general-$(date +%s)"
+  curl -s "${url}" --output "${file}" \
+    && aptly repo add general "${output_path}" \
+    && aptly snapshot create "${snapshot}" from repo general \
+    && aptly publish switch debian "${snapshot}"
+else
+  printf "Package present.\n"
+fi

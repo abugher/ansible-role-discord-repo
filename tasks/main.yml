@@ -1,0 +1,4 @@
+---
+- include:              '../tasks/dependencies.yml'
+- include:              '../tasks/install_files.yml'
+- include:              '../tasks/create_files.yml'

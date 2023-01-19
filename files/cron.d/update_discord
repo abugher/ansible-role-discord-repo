@@ -1,0 +1,2 @@
+# m     h       dom     mon     dow     user            command
+12      *       *       *       *       apt-repo-server /usr/local/bin/update_discord_cronjob

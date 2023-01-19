@@ -1,0 +1,4 @@
+#!/bin/bash
+
+/usr/local/bin/update_discord > /var/log/update_discord.log 2>&1
+echo "${?}" > /var/log/update_discord.ret
