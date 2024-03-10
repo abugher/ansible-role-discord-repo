@@ -1,6 +1,4 @@
 ---
-dependencies:
-  - 'apt-repo-server'
 install_files:
   - owner:              'root'
     group:              'root'
