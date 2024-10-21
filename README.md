@@ -1,6 +1,3 @@
-# Client Configuration
+This role configures a host to continually package the latest version of Discord and make it available as part of an apt repo provisioned by the `apt-repo-server` role.
 
-Mirror the directory structure under `doc` to the client system's root.
-Replace the placeholder with the real password.  `apt update`, then `apt-cache
-policy discord` to see what's available if you want, then `apt install
-discord`.
+To actually install Discord, first deploy this role to a server, then deploy `apt-repo-client` to the client, then on the client install the `discord` package.
