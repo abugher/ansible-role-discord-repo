@@ -33,9 +33,12 @@ function main() {
   output "Removing any old packages from repo."
   remove_old_packages_from_repo
 
-  # Conditionally skipping this could be more efficient.
-  output "Publishing."
-  publish
+  if already_published; then
+    output "Already published."
+  else
+    output "Publishing."
+    publish
+  fi
 
   output "Removing any old snapshots from repo."
   remove_old_snapshots_from_repo
@@ -44,6 +47,13 @@ function main() {
   # clean them up.
   output "Cleaning up."
   cleanup
+}
+
+
+function already_published() {
+  aptly repo search "${repo}" \
+    | grep "^${package_name}_" \
+    | grep -q "_${current_package_version}_"
 }
 
 
@@ -84,7 +94,13 @@ function remove_old_package_files() {
 
 
 remove_old_packages_from_repo() {
-  old_packages=( $( aptly repo search "${repo}" | grep "^${package_name}_" | grep -v "_${current_package_version}_" ) )
+  old_packages=( 
+    $( 
+      aptly repo search "${repo}" \
+        | grep "^${package_name}_" \
+        | grep -v "_${current_package_version}_" 
+    ) 
+  )
   for old_package in "${old_packages[@]}"; do
     aptly repo remove "${repo}" "${old_package}"
   done
