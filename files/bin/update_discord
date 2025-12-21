@@ -1,25 +1,127 @@
 #!/bin/bash
 
+package_name='discord'
+#repo="${package}"
+repo='general'
+distribution='debian'
+#repo="general"
 generic_url='https://discord.com/api/download?platform=linux&format=deb'
-output_path='/home/apt-repo-server/discord'
+download_dir='/home/apt-repo-server/discord'
 
-url="$(
+
+function main() {
+  url="$(get_url)" \
+    || fail "Failed to get URL."
+  current_package_file="$(sed -E 's#.*/##g' <<< "${url}")"
+  current_package_name_and_version="${current_package_file%.deb}"
+  current_package_version="${current_package_name_and_version#discord-}"
+  grep -q . <<< "${current_package_version}" \
+    || fail "Failed to read current package version."
+  output "Current package version:  '${current_package_version}'"
+  download_path="${download_dir}/${current_package_file}"
+  # No whitespace allowed in snapshot names.
+  current_snapshot="${repo}-$(date +%s)"
+
+  if ! test -e "${download_path}"; then
+    output "Package not present.  Downloading."
+    download
+  else
+    output "Package already present."
+  fi
+
+  output "Removing any old package files."
+  remove_old_package_files
+
+  output "Removing any old packages from repo."
+  remove_old_packages_from_repo
+
+  # Conditionally skipping this could be more efficient.
+  output "Publishing."
+  publish
+
+  output "Removing any old snapshots from repo."
+  remove_old_snapshots_from_repo
+
+  # For some reason aptly clings to unreferenced package files unless told to
+  # clean them up.
+  output "Cleaning up."
+  cleanup
+}
+
+
+function get_url() {
   curl -s "${generic_url}" \
     | sed -E 's/.*(https:.*\.deb).*/\1/' \
     | grep '^https:'
-)"
-filename="$(sed -E 's#.*/##g' <<< "${url}")"
-file="${output_path}/${filename}"
+}
 
-printf "Current package:  %s\n" "${filename}"
 
-if ! test -e "${file}"; then
-  printf "Package not present.  Downloading.\n"
-  snapshot="general-$(date +%s)"
-  curl -s "${url}" --output "${file}" \
-    && aptly repo add general "${output_path}" \
-    && aptly snapshot create "${snapshot}" from repo general \
-    && aptly publish switch debian "${snapshot}"
-else
-  printf "Package present.\n"
-fi
+function download() {
+  curl -s "${url}" --output "${download_path}" \
+    || fail "Failed to download new package."
+}
+
+
+function publish() {
+  aptly repo add "${repo}" "${download_dir}" \
+    || fail "Failed to add downloaded package to repo."
+  aptly snapshot create "${current_snapshot}" from repo "${repo}" \
+    || fail "Failed to create new snapshot of repo."
+  # Grok `aptly publish switch ...`.  Would this conflict with a similar update
+  # process for a different package?
+  aptly publish switch "${distribution}" "${current_snapshot}" \
+    || fail "Failed to publish new snapshot of repo."
+}
+
+
+function remove_old_package_files() {
+  shopt -s nullglob
+  for package_file_path in "${download_dir}"/*; do
+    package_file="${package_file_path##*/}"
+    if ! test "${package_file}" = "${current_package_file}"; then
+      rm "${package_file_path}" \
+        || fail "Failed to remove old package file:  '${package_file_path}'"
+    fi
+  done
+  shopt -u nullglob
+}
+
+
+remove_old_packages_from_repo() {
+  old_packages=( $( aptly repo search "${repo}" | grep "^${package_name}_" | grep -v "_${current_package_version}_" ) )
+  for old_package in "${old_packages[@]}"; do
+    aptly repo remove "${repo}" "${old_package}"
+  done
+}
+
+
+function remove_old_snapshots_from_repo() {
+  # Assume no whitespace in snapshot names.
+  # Assume no empty snapshot names.
+  old_snapshots=( $(aptly snapshot list -raw -sort=time | head -n -1) ) \
+    || fail "Failed to list snapshots."
+  for old_snapshot in "${old_snapshots[@]}"; do
+    aptly snapshot drop "${old_snapshot}" \
+      || fail "Failed to remove old snapshot:  '${old_snapshot}'"
+  done
+}
+
+
+function cleanup() {
+  aptly db cleanup \
+    || fail "Failed to remove unreferenced package files."
+}
+
+
+function fail() {
+  printf 'ERROR:  %s\n' "${1}" >&2
+  exit "${2:-1}"
+}
+
+
+function output() {
+  printf '%s\n' "${1}"
+}
+
+
+main
